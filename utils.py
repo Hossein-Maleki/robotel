@@ -7,6 +7,16 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
+
+
+def generate_code(length: int = 8) -> str:
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+
+def mb_to_bytes(mb: float | int) -> int:
+    return int(mb * 1024 * 1024)
+
+
 def _int(name: str, default: int = 0) -> int:
     try:
         return int(os.getenv(name, str(default)).strip())
