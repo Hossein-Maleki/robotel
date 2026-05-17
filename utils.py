@@ -1,5 +1,6 @@
-
 import os
+import random
+import string
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -7,8 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
-
-
+# ---------- utils ----------
 def generate_code(length: int = 8) -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
@@ -17,6 +17,7 @@ def mb_to_bytes(mb: float | int) -> int:
     return int(mb * 1024 * 1024)
 
 
+# ---------- helpers ----------
 def _int(name: str, default: int = 0) -> int:
     try:
         return int(os.getenv(name, str(default)).strip())
@@ -53,20 +54,8 @@ DB_NAME = os.getenv("DB_NAME", "tele2rub_pro").strip()
 # ---------- Admins ----------
 ADMIN_IDS = _ids_list("ADMIN_IDS")
 
-# ---------- Paths ----------
-DOWNLOAD_DIR = BASE_DIR / "downloads"
-SESSIONS_DIR = BASE_DIR / "sessions"
-DATA_DIR = BASE_DIR / "data"
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-# ---------- Upload tuning ----------
-MAX_UPLOAD_RETRIES = 5
-UPLOAD_TOTAL_TIMEOUT = 1800  # 30 minutes hard cap per file
-
-# ---------- Subscription plans ----------
-PLANS: dict[str, dict] = {
+# ---------- Plans ----------
+PLANS = {
     "free": {
         "monthly_quota_mb": 500,
         "max_file_mb": 200,
