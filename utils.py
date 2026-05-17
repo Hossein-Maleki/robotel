@@ -84,3 +84,18 @@ def unique_path(path: str) -> str:
         if not os.path.exists(new_path):
             return new_path
         counter += 1
+
+import re
+
+
+def extract_first_url(text: str) -> str | None:
+    """
+    اولین لینک داخل متن رو استخراج می‌کنه
+    """
+    if not text:
+        return None
+
+    pattern = r"(https?://[^\s]+)"
+    match = re.search(pattern, text)
+
+    return match.group(1) if match else Nonej        
