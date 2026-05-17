@@ -47,6 +47,17 @@ def eta_text(seconds: int) -> str:
         return f"{m}m {s}s"
     return f"{s}s"
 
+def split_name(filename: str) -> tuple[str, str]:
+    """
+    جدا کردن اسم فایل از پسوند
+    example: video.mp4 -> ("video", ".mp4")
+    """
+    if not filename:
+        return "file", ""
+
+    import os
+    name, ext = os.path.splitext(filename)
+    return name or "file", ext
 
 def unique_path(path: str) -> str:
     if not os.path.exists(path):
