@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
-
+from pyrogram import filters
 import aiohttp
 from rubpy import Client as RubikaClient
 from rubpy import filters as rub_filters
@@ -367,7 +367,7 @@ async def main():
     # rubpy stores session relative to CWD by default; pass full path
     client = RubikaClient(name=session_path)
 
-    @client.on_message_updates(rub_filters.is_private & rub_filters.is_text)
+    @client.on_message_updates(filters.private & filters.text)
     async def _on_msg(message):
         await _handle_incoming(client, message)
 
