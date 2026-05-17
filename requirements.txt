@@ -1,0 +1,7 @@
+pyrogram==2.0.106
+tgcrypto==1.2.5
+rubpy==7.3.4
+python-dotenv==1.0.1
+aiohttp==3.10
+motor==3.5.0
+pymongo==4.7.3
