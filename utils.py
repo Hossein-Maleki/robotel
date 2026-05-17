@@ -46,7 +46,20 @@ def eta_text(seconds: int) -> str:
     if m:
         return f"{m}m {s}s"
     return f"{s}s"
+def progress_bar(percent: float, length: int = 10) -> str:
+    """
+    ساخت نوار پیشرفت متنی
+    مثال: [█████-----] 50%
+    """
+    try:
+        percent = max(0, min(100, float(percent)))
+    except Exception:
+        percent = 0
 
+    filled = int((percent / 100) * length)
+    empty = length - filled
+
+    return f"[{'█' * filled}{'-' * empty}] {int(percent)}%"
 def split_name(filename: str) -> tuple[str, str]:
     """
     جدا کردن اسم فایل از پسوند
