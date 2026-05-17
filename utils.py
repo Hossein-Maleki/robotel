@@ -1,6 +1,7 @@
 import os
 import random
 import string
+import math
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -8,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
-# ---------- utils ----------
+# ---------- core ----------
 def generate_code(length: int = 8) -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
@@ -17,73 +18,45 @@ def mb_to_bytes(mb: float | int) -> int:
     return int(mb * 1024 * 1024)
 
 
-# ---------- helpers ----------
-def _int(name: str, default: int = 0) -> int:
-    try:
-        return int(os.getenv(name, str(default)).strip())
-    except Exception:
-        return default
+# ---------- file utils ----------
+def pretty_size(size_bytes: int) -> str:
+    if size_bytes == 0:
+        return "0B"
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {units[i]}"
 
 
-def _ids_list(name: str) -> list[int]:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return []
-    out = []
-    for part in raw.replace(";", ",").split(","):
-        part = part.strip()
-        if part.lstrip("-").isdigit():
-            out.append(int(part))
-    return out
+def safe_filename(name: str) -> str:
+    return "".join(c for c in name if c.isalnum() or c in "._- ").strip()
 
 
-# ---------- Telegram ----------
-API_ID = _int("API_ID", 0)
-API_HASH = os.getenv("API_HASH", "").strip()
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+def eta_text(seconds: int) -> str:
+    if seconds <= 0:
+        return "0s"
 
-# ---------- Rubika ----------
-RUBIKA_SESSION = os.getenv("RUBIKA_SESSION", "rubika_session").strip()
-RUBIKA_STORAGE_CHANNEL_GUID = os.getenv("RUBIKA_STORAGE_CHANNEL_GUID", "").strip()
-RUBIKA_ACCOUNT_USERNAME = os.getenv("RUBIKA_ACCOUNT_USERNAME", "").strip().lstrip("@")
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
 
-# ---------- MongoDB ----------
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017").strip()
-DB_NAME = os.getenv("DB_NAME", "tele2rub_pro").strip()
+    if h:
+        return f"{h}h {m}m {s}s"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
 
-# ---------- Admins ----------
-ADMIN_IDS = _ids_list("ADMIN_IDS")
 
-# ---------- Plans ----------
-PLANS = {
-    "free": {
-        "monthly_quota_mb": 500,
-        "max_file_mb": 200,
-        "duration_days": 36500,
-        "label": "رایگان",
-        "file_expiry_days": 7,
-    },
-    "bronze": {
-        "monthly_quota_mb": 5 * 1024,
-        "max_file_mb": 1024,
-        "duration_days": 30,
-        "label": "برنزی",
-        "file_expiry_days": 30,
-    },
-    "silver": {
-        "monthly_quota_mb": 20 * 1024,
-        "max_file_mb": 2048,
-        "duration_days": 30,
-        "label": "نقره‌ای",
-        "file_expiry_days": 90,
-    },
-    "gold": {
-        "monthly_quota_mb": 100 * 1024,
-        "max_file_mb": 2048,
-        "duration_days": 30,
-        "label": "طلایی",
-        "file_expiry_days": 365,
-    },
-}
+def unique_path(path: str) -> str:
+    if not os.path.exists(path):
+        return path
 
-DEFAULT_PLAN = "free"
+    base, ext = os.path.splitext(path)
+    counter = 1
+
+    while True:
+        new_path = f"{base}_{counter}{ext}"
+        if not os.path.exists(new_path):
+            return new_path
+        counter += 1
