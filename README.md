@@ -1,334 +1,403 @@
- 
-Action: file_editor create /app/bot/README.md --file-text "# 🚀 Tele2Rub Pro
+حالا فایل README کامل فارسی رو می‌سازم:
+Action: file_editor create /app/project/README.md --file-text "# ربات انتقال فایل از تلگرام به روبیکا (TTR+)
 
-پلتفرم انتقال فایل از تلگرام به روبیکا با **پنل کاربری شخصی‌سازی شده**، **سیستم اشتراک**، **مدیریت حجم مصرفی**، **پنل ادمین کامل** و **سیستم کد یونیک برای دانلود مجدد در روبیکا**.
-
-این پروژه نسخه‌ی توسعه‌یافته‌ی ربات [Tele2Rub](https://github.com/Hossein-Maleki/TTR) است و کاملاً بازنویسی شده تا به‌صورت چندکاربره و حرفه‌ای روی سرور لینوکس اجرا شود.
-
----
-
-## 🌟 فیچرهای جدید
-
-- 👤 **پروفایل شخصی برای هر کاربر تلگرام** (نام، شناسه، مصرف ماهانه، تعداد آپلود)
-- 💎 **سیستم اشتراک ۴ سطحی** (رایگان / برنزی / نقره‌ای / طلایی) با مدت زمان دلخواه
-- 📊 **مدیریت حجم مصرفی ماهانه** و حد حداکثر حجم برای هر فایل
-- 🔐 **کد یونیک ۸ کاراکتری** برای هر آپلود (مثل `ABC12345`)
-- 🤖 **اکانت روبیکا روی سرور به‌عنوان self-bot**: وقتی کسی کد را به آن پیام می‌دهد، فایل را به‌صورت اتوماتیک از چنل خصوصی **forward** می‌کند
-- 🛠 **پنل ادمین داخل ربات تلگرام** (با دکمه‌های شیشه‌ای):
-  - فعال‌سازی/تمدید اشتراک
-  - مسدودسازی و آزادسازی کاربر
-  - مشاهده آمار کلی
-  - لیست کاربران
-  - پیام همگانی
-  - تنظیم چنل ذخیره‌سازی روبیکا
-- 📥 **پشتیبانی از فایل + لینک مستقیم**
-- 🔄 **صف توزیع‌شده روی MongoDB** (Atomic، بدون race condition)
-- 🛡 **محدودیت سایز فایل و حجم ماهانه** قبل و بعد دانلود از URL
-- 📈 **آمار کامل کاربر و سیستم**
-- ♻️ **Restart خودکار** پروسس‌ها در صورت کرش (داخل launcher)
-- 🐧 فایل **systemd service** آماده برای سرور لینوکس
+سیستم کامل انتقال فایل از تلگرام به روبیکا با قابلیت‌های پیشرفته شامل:
+- پروفایل و شخصی‌سازی برای هر کاربر
+- سیستم اشتراک با محدودیت حجم
+- کد یونیک برای هر فایل آپلود شده
+- دریافت فایل در روبیکا با ارسال کد
 
 ---
 
-## 🏗 معماری
+## معماری سیستم
 
 ```
-┌─────────────┐    file/URL     ┌──────────────┐    Mongo Queue    ┌──────────────┐
-│  Telegram   │ ─────────────▶  │ Telegram Bot │ ────────────────▶ │ Rubika Worker│
-│   User      │                 │  (telebot)   │                   │ (rub_worker) │
-└─────────────┘                 └──────────────┘                   └──────┬───────┘
-                                       ▲                                  │
-                                       │  status                          │ upload
-                                       └────────── MongoDB ◀──────────────┤
-                                                                          ▼
-                                                              ┌────────────────────┐
-                                                              │ Rubika Private     │
-                                                              │ Storage Channel    │
-                                                              └────────────────────┘
-                                                                          ▲
-                                                                          │ forward by code
-                                                              ┌────────────────────┐
-                                                              │ Rubika User sends  │
-                                                              │ code in PV         │
-                                                              └────────────────────┘
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│  ادمین       │      │  ربات        │      │  کاربر       │
+│  تلگرام      │─────>│  تلگرام      │<─────│  تلگرام      │
+│  (آپلود فایل)│      │  (Pyrogram)  │      │  (ثبت‌نام)   │
+└──────────────┘      └──────┬───────┘      └──────────────┘
+                             │
+                        SQLite DB
+                        + Downloads/
+                             │
+                      ┌──────┴───────┐      ┌──────────────┐
+                      │  ربات        │<─────│  کاربر       │
+                      │  روبیکا      │      │  روبیکا      │
+                      │  (rubpy)     │─────>│  (دریافت     │
+                      └──────────────┘      │   فایل)      │
+                                            └──────────────┘
 ```
 
-دو پروسس مجزا که با MongoDB با هم در ارتباط هستند و توسط `main.py` ساپروایز می‌شوند.
+### نحوه کار:
+1. **ادمین** فایل‌ها را به ربات تلگرام ارسال می‌کند
+2. ربات فایل را دانلود کرده و **کد یونیک ۸ رقمی** تولید می‌کند
+3. **کاربران** در ربات تلگرام ثبت‌نام و اشتراک خریداری می‌کنند
+4. کاربران حساب روبیکای خود را با ارسال **کد لینک** متصل می‌کنند
+5. کاربران **کد فایل** را به ربات روبیکا ارسال می‌کنند
+6. ربات روبیکا اشتراک و حجم را بررسی کرده و **فایل را ارسال** می‌کند
 
 ---
 
-## 📋 پیش‌نیازها
+## فایل‌های پروژه
 
-| نرم‌افزار | حداقل نسخه |
-|----------|-----------|
-| Ubuntu / Debian (یا هر توزیع لینوکس) | 20.04+ |
-| Python | 3.10+ |
-| MongoDB | 4.4+ |
-| دسترسی root یا sudo | - |
+```
+TTR+/
+├── main.py           # نقطه شروع - اجرای همه سرویس‌ها
+├── telebot.py        # ربات تلگرام (Pyrogram)
+├── rubbot.py         # ربات روبیکا (rubpy)
+├── config.py         # تنظیمات و ثابت‌ها
+├── database.py       # مدیریت SQLite
+├── requirements.txt  # وابستگی‌ها
+├── .env.example      # نمونه فایل تنظیمات
+├── .env              # فایل تنظیمات (باید ساخته شود)
+├── README.md         # همین فایل
+├── downloads/        # فایل‌های دانلود شده
+└── bot.db            # پایگاه داده (ساخته می‌شود)
+```
 
 ---
 
-## 🚀 نصب سریع روی سرور لینوکس (Ubuntu 22.04)
+## پلن‌های اشتراک
 
-### مرحله ۱: نصب پیش‌نیازها
+| شماره پلن | حجم | قیمت (تومان) | مدت |
+|-----------|------|-------------|------|
+| ۱ | ۲ گیگابایت | ۵۰,۰۰۰ | ۳۰ روز |
+| ۲ | ۴ گیگابایت | ۱۰۰,۰۰۰ | ۳۰ روز |
+| ۳ | ۶ گیگابایت | ۱۵۰,۰۰۰ | ۳۰ روز |
+| ۴ | ۱۰ گیگابایت | ۲۵۰,۰۰۰ | ۳۰ روز |
+
+> قیمت هر گیگابایت: ۲۵,۰۰۰ تومان
+
+---
+
+## نصب و راه‌اندازی روی سرور لینوکس
+
+### پیش‌نیازها
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git curl gnupg
+sudo apt install -y python3 python3-venv python3-pip git screen
 ```
 
-### مرحله ۲: نصب MongoDB
+### ۱. دریافت پروژه
 
 ```bash
-# افزودن مخزن رسمی MongoDB
-curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-   sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
-echo \"deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse\" | \
-   sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-
-sudo apt update
-sudo apt install -y mongodb-org
-sudo systemctl enable --now mongod
-sudo systemctl status mongod   # بررسی وضعیت
+git clone https://github.com/YOUR_USERNAME/TTR-Plus.git
+cd TTR-Plus
 ```
 
-> اگر از Debian یا توزیع دیگری استفاده می‌کنید، [راهنمای رسمی نصب MongoDB](https://www.mongodb.com/docs/manual/administration/install-on-linux/) را ببینید.
-
-### مرحله ۳: دریافت پروژه
+### ۲. ساخت محیط مجازی
 
 ```bash
-sudo mkdir -p /opt/tele2rub-pro
-sudo chown $USER:$USER /opt/tele2rub-pro
-cd /opt/tele2rub-pro
-
-# اگر کد را در گیت‌هاب دارید:
-# git clone <your-repo> .
-
-# یا فایل‌های پروژه را از این پوشه (/app/bot) کپی کنید.
-```
-
-### مرحله ۴: ساخت محیط مجازی و نصب وابستگی‌ها
-
-```bash
-cd /opt/tele2rub-pro
 python3 -m venv venv
 source venv/bin/activate
+```
+
+### ۳. نصب وابستگی‌ها
+
+```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### مرحله ۵: ساخت فایل تنظیمات
+### ۴. تنظیمات (.env)
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-سپس مقادیر زیر را وارد کنید:
+محتوای فایل `.env`:
 
 ```env
 API_ID=12345678
-API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-BOT_TOKEN=123456:ABCDEF...
-RUBIKA_SESSION=rubika_main
-RUBIKA_STORAGE_CHANNEL_GUID=    # اختیاری، بعداً با /setchannel ست می‌شود
-RUBIKA_ACCOUNT_USERNAME=my_rubika_username   # بدون @
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=tele2rub_pro
-ADMIN_IDS=11111111,22222222  # شناسه عددی تلگرامِ ادمین‌ها
+API_HASH=your_api_hash_here
+BOT_TOKEN=your_bot_token_here
+RUBIKA_SESSION=rubika_session
+ADMIN_IDS=123456789
+CHANNEL_ID=-1001234567890
 ```
 
-#### 🔑 از کجا این مقادیر را بگیریم؟
-- **`API_ID` و `API_HASH`**: از [my.telegram.org](https://my.telegram.org) → API development tools
-- **`BOT_TOKEN`**: از [@BotFather](https://t.me/BotFather) با `/newbot`
-- **`ADMIN_IDS`**: از [@userinfobot](https://t.me/userinfobot) شناسه عددی خودتان
-- **`RUBIKA_ACCOUNT_USERNAME`**: یوزرنیم پابلیک اکانتی که در روبیکا داخل سرور لاگین می‌کنید
+#### دریافت مقادیر:
 
-### مرحله ۶: لاگین اولیه اکانت روبیکا (تعاملی)
+**API_ID و API_HASH:**
+1. به سایت https://my.telegram.org بروید
+2. با شماره تلگرام وارد شوید
+3. روی **API development tools** کلیک کنید
+4. فرم را پر کنید (App title: TTR, Short name: ttr)
+5. مقادیر API_ID و API_HASH را کپی کنید
 
-اولین اجرا برای دریافت کد ورود روبیکا تعاملی است، پس مرحله اول را در ترمینال زنده انجام دهید:
+**BOT_TOKEN:**
+1. در تلگرام به @BotFather پیام دهید
+2. دستور /newbot را بزنید
+3. نام و یوزرنیم ربات را وارد کنید
+4. توکن ربات را کپی کنید
+
+**ADMIN_IDS:**
+- شناسه عددی تلگرام ادمین‌ها (با کاما جدا شوند)
+- برای پیدا کردن شناسه: به @userinfobot پیام دهید
+
+**CHANNEL_ID (اختیاری):**
+- شناسه کانال خصوصی تلگرام (با - شروع می‌شود)
+- ربات باید ادمین کانال باشد
+
+### ۵. لاگین روبیکا (اولین بار)
 
 ```bash
-cd /opt/tele2rub-pro
 source venv/bin/activate
-python rub_worker.py
+python rubbot.py
 ```
 
-- ربات از شما شماره موبایل و سپس کد تأیید روبیکا را می‌پرسد.
-- بعد از لاگین موفق، فایل سشن در `sessions/` ذخیره می‌شود.
-- با `Ctrl+C` خارج شوید — کافی است یک‌بار سشن ساخته شود.
+- شماره موبایل روبیکا را وارد کنید
+- کد تایید را وارد کنید
+- فایل session ذخیره می‌شود
 
-### مرحله ۷: ساخت چنل خصوصی روبیکا
+### ۶. اجرای پروژه
 
-1. در اپلیکیشن روبیکا با همان شماره‌ای که در سرور لاگین کرده‌اید وارد شوید.
-2. یک **چنل خصوصی جدید** بسازید (مثلاً `Tele2Rub Storage`).
-3. **`object_guid` چنل** را بگیرید (شناسه‌ای که با `c0` شروع می‌شود).
-   راه‌های گرفتن GUID:
-   - وارد چنل شوید، روی نام چنل بزنید، لینک اشتراک‌گذاری بگیرید. در داخل URL یا API response مقدار GUID مشخص است.
-   - یا یک‌بار از داخل ترمینال در همان ENV ربات:
-     ```python
-     >>> from rubpy import Client
-     >>> import asyncio
-     >>> async def f():
-     ...     c = Client('sessions/rubika_main')
-     ...     await c.start()
-     ...     async for chat in c.get_chats():
-     ...         print(chat.title, chat.object_guid)
-     ...     await c.disconnect()
-     >>> asyncio.run(f())
-     ```
-4. مقدار GUID را در `.env` مقدار `RUBIKA_STORAGE_CHANNEL_GUID` بگذارید، یا بعد از اجرا، در تلگرام به ربات `/setchannel c0XXXX...` بدهید.
-
-### مرحله ۸: اجرا
-
-#### روش الف) اجرای دستی (تست)
-
+#### روش ۱: اجرای مستقیم
 ```bash
-cd /opt/tele2rub-pro
 source venv/bin/activate
 python main.py
 ```
 
-#### روش ب) اجرای دائمی با systemd (پیشنهادی)
+#### روش ۲: اجرا با Screen (توصیه شده)
+```bash
+screen -S ttr
+source venv/bin/activate
+python main.py
+```
+برای خروج از screen: `Ctrl+A` سپس `D`
+برای بازگشت: `screen -r ttr`
+
+#### روش ۳: اجرای جداگانه هر سرویس
+
+**ترمینال ۱ - ربات تلگرام:**
+```bash
+screen -S tg
+source venv/bin/activate
+python telebot.py
+```
+
+**ترمینال ۲ - ربات روبیکا:**
+```bash
+screen -S rb
+source venv/bin/activate
+python rubbot.py
+```
+
+#### روش ۴: اجرا با systemd (برای اجرای دائمی)
+
+فایل سرویس بسازید:
 
 ```bash
-sudo cp /opt/tele2rub-pro/tele2rub-pro.service /etc/systemd/system/
+sudo nano /etc/systemd/system/ttr.service
+```
+
+محتوا:
+```ini
+[Unit]
+Description=TTR+ File Transfer Bot
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/TTR-Plus
+Environment=PATH=/home/YOUR_USERNAME/TTR-Plus/venv/bin
+ExecStart=/home/YOUR_USERNAME/TTR-Plus/venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+فعال‌سازی:
+```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now tele2rub-pro
-sudo systemctl status tele2rub-pro
-# مشاهده لاگ زنده:
-sudo journalctl -u tele2rub-pro -f
+sudo systemctl enable ttr
+sudo systemctl start ttr
 ```
 
-#### روش ج) اجرا با screen (ساده اما کم‌قدرت‌تر)
-
+بررسی وضعیت:
 ```bash
-screen -S tele2rub
-cd /opt/tele2rub-pro
-source venv/bin/activate
-python main.py
-# برای جدا شدن از screen: Ctrl+A سپس d
-# بازگشت: screen -r tele2rub
+sudo systemctl status ttr
+journalctl -u ttr -f
 ```
 
 ---
 
-## 🎯 طرز استفاده
+## دستورات ربات تلگرام
 
-### کاربر عادی
-1. وارد ربات تلگرام شوید و `/start` بزنید.
-2. فایل را برای ربات بفرستید (تا حداکثر ۲ گیگابایت برای پلن طلایی).
-3. ربات فایل را در چنل خصوصی روبیکا آپلود می‌کند.
-4. یک **کد یونیک ۸ کاراکتری** به همراه آی‌دی اکانت روبیکا دریافت می‌کنید.
-5. هرکس آن کد را به اکانت روبیکا بفرستد، فایل به‌صورت اتوماتیک forward می‌شود.
-
-### ادمین
-دستورات یا دکمه‌های پنل ادمین:
-
-| دستور | کاربرد |
-|-------|--------|
-| `/admin` | باز کردن پنل ادمین |
-| `/grant <user_id> <plan> [days]` | فعال‌سازی یا تمدید اشتراک |
-| `/block <user_id>` | مسدودسازی کاربر |
-| `/unblock <user_id>` | آزادسازی کاربر |
-| `/stats` | آمار کلی |
-| `/setchannel <guid>` | تنظیم چنل ذخیره‌سازی روبیکا |
-
-پلن‌ها: `free` / `bronze` / `silver` / `gold`
-
-مثال: `/grant 123456789 silver 30` → ۳۰ روز اشتراک نقره‌ای
-
-### دستورات کاربر در ربات
-
-| دستور | کاربرد |
-|-------|--------|
-| `/start` | شروع و منو |
-| `/profile` | پروفایل و وضعیت اشتراک |
-| `/plans` | لیست پلن‌ها |
-| `/myfiles` | فهرست فایل‌های اخیر شما |
-| `/del <job_id>` | حذف یک مورد از صف |
-| `/delall` | پاکسازی صف خودِ شما |
+### دستورات کاربران:
+| دستور | توضیح |
+|--------|-------|
+| `/start` | ثبت‌نام و شروع |
+| `/profile` | مشاهده پروفایل و اشتراک |
+| `/plans` | مشاهده پلن‌های اشتراک |
+| `/subscribe <شماره>` | درخواست خرید اشتراک |
+| `/link` | دریافت کد لینک روبیکا |
+| `/mydownloads` | تاریخچه دانلودها |
 | `/help` | راهنما |
 
+### دستورات ادمین:
+| دستور | توضیح |
+|--------|-------|
+| ارسال فایل | آپلود فایل و دریافت کد یونیک |
+| `/approve <user_id> <plan_id>` | تایید اشتراک کاربر |
+| `/addadmin <user_id>` | افزودن ادمین جدید |
+| `/stats` | آمار سیستم |
+
 ---
 
-## 🔧 پیکربندی پلن‌ها
+## نحوه استفاده ربات روبیکا
 
-پلن‌ها در `config.py` تعریف شده‌اند. می‌توانید سقف‌ها را تغییر دهید:
+### لینک حساب:
+1. در ربات تلگرام `/link` بزنید
+2. کد لینک (مانند `LNKA3B7C`) را کپی کنید
+3. کد را به حساب ربات در روبیکا ارسال کنید
 
-```python
-PLANS = {
-    \"free\":   {\"monthly_quota_mb\": 500,    \"max_file_mb\": 200,  ...},
-    \"bronze\": {\"monthly_quota_mb\": 5120,   \"max_file_mb\": 1024, ...},
-    \"silver\": {\"monthly_quota_mb\": 20480,  \"max_file_mb\": 2048, ...},
-    \"gold\":   {\"monthly_quota_mb\": 102400, \"max_file_mb\": 2048, ...},
-}
+### دریافت فایل:
+1. کد ۸ رقمی فایل را از ادمین بگیرید
+2. کد را به ربات روبیکا ارسال کنید
+3. فایل به‌صورت خودکار ارسال می‌شود
+
+### دستورات روبیکا:
+| دستور | توضیح |
+|--------|-------|
+| `/start` یا `شروع` | خوش‌آمدگویی |
+| `/profile` یا `پروفایل` | مشاهده پروفایل |
+| `/help` یا `راهنما` | راهنما |
+| `LNKXXXXX` | لینک حساب |
+| `XXXXXXXX` (۸ حرف) | دریافت فایل |
+
+---
+
+## جریان کامل سیستم
+
+### ۱. ثبت‌نام کاربر
+```
+کاربر ──> /start در تلگرام ──> ثبت‌نام خودکار
+```
+
+### ۲. خرید اشتراک
+```
+کاربر ──> /plans ──> انتخاب پلن ──> /subscribe 2
+         ──> پرداخت ──> ادمین: /approve <id> <plan>
+```
+
+### ۳. لینک روبیکا
+```
+کاربر ──> /link در تلگرام ──> کپی کد LNKXXXXX
+       ──> ارسال کد به ربات روبیکا ──> لینک شدن
+```
+
+### ۴. آپلود فایل (ادمین)
+```
+ادمین ──> ارسال فایل به ربات تلگرام
+      ──> دانلود و ذخیره ──> تولید کد یونیک
+      ──> اشتراک‌گذاری کد با کاربران
+```
+
+### ۵. دریافت فایل
+```
+کاربر ──> ارسال کد به ربات روبیکا
+      ──> بررسی اشتراک و حجم
+      ──> ارسال فایل ──> کسر حجم
 ```
 
 ---
 
-## 🗃 ساختار پروژه
+## پایگاه داده
 
+سیستم از **SQLite** استفاده می‌کند. جداول:
+
+### users
+| فیلد | توضیح |
+|------|-------|
+| telegram_id | شناسه تلگرام |
+| rubika_guid | شناسه روبیکا |
+| username | یوزرنیم |
+| first_name | نام |
+| link_code | کد لینک |
+| is_linked | وضعیت لینک |
+| is_admin | ادمین بودن |
+
+### subscriptions
+| فیلد | توضیح |
+|------|-------|
+| user_id | شناسه کاربر |
+| plan_id | شماره پلن |
+| volume_limit | حجم کل (بایت) |
+| volume_used | حجم مصرف شده |
+| start_date | تاریخ شروع |
+| end_date | تاریخ پایان |
+
+### uploads
+| فیلد | توضیح |
+|------|-------|
+| unique_code | کد یونیک ۸ رقمی |
+| file_path | مسیر فایل |
+| file_name | نام فایل |
+| file_size | حجم فایل |
+| uploaded_by | آپلود توسط |
+
+### downloads
+| فیلد | توضیح |
+|------|-------|
+| user_id | شناسه کاربر |
+| upload_id | شناسه آپلود |
+| file_size | حجم دانلود |
+| downloaded_at | تاریخ دانلود |
+
+---
+
+## عیب‌یابی
+
+### مشکل: ربات تلگرام کار نمی‌کند
+- مطمئن شوید BOT_TOKEN صحیح است
+- از فیلترشکن/VPN مناسب استفاده کنید
+- لاگ‌ها را بررسی کنید
+
+### مشکل: ربات روبیکا وصل نمی‌شود
+- فایل session را حذف و دوباره لاگین کنید
+- مطمئن شوید شماره موبایل صحیح است
+- `pip install -U rubpy` را اجرا کنید
+
+### مشکل: فایل ارسال نمی‌شود
+- حجم فایل را بررسی کنید (حداکثر ۲ گیگ)
+- فضای دیسک سرور را بررسی کنید
+- مسیر downloads/ را بررسی کنید
+
+### بکاپ‌گیری
+```bash
+# بکاپ از دیتابیس
+cp bot.db bot.db.backup
+
+# بکاپ از سشن روبیکا
+cp rubika_session* backup/
 ```
-tele2rub-pro/
-├── main.py                  # Launcher: هر دو پروسه را اجرا و ساپروایز می‌کند
-├── telebot.py               # ربات تلگرام (UI و پنل ادمین)
-├── rub_worker.py            # Worker روبیکا (آپلود + گوش دادن به کدها)
-├── db.py                    # لایه MongoDB
-├── config.py                # تنظیمات و تعریف پلن‌ها
-├── utils.py                 # توابع کمکی
-├── requirements.txt
-├── .env.example
-├── tele2rub-pro.service     # یونیت systemd
-└── README.md
-```
 
 ---
 
-## 🛠 عیب‌یابی
+## نکات امنیتی
 
-#### ربات تلگرام بالا نمی‌آید
-- مطمئن شوید `API_ID` و `API_HASH` و `BOT_TOKEN` در `.env` پر شده‌اند.
-- لاگ را ببینید: `journalctl -u tele2rub-pro -f`
-
-#### Worker روبیکا کد نمی‌خواهد یا قطع می‌شود
-- اولین بار حتماً `python rub_worker.py` را به‌صورت دستی (نه از داخل systemd) اجرا کنید تا کد را تعاملی بزنید.
-- اگر سشن قطع شد، فایل `sessions/rubika_main.session` را پاک کنید و دوباره لاگین کنید.
-
-#### کد یونیک ارسال می‌شود ولی Forward انجام نمی‌شود
-- مطمئن شوید اکانت روبیکا داخل **همان چنلی** که فایل آنجا آپلود می‌شود، عضو باشد و دسترسی forward داشته باشد.
-- یعنی چنل را خودِ همان اکانت ساخته باشد یا ادمین باشد.
-
-#### حجم فایل از حد مجاز عبور می‌کند
-- در `config.py` مقدار `max_file_mb` پلن مربوطه را افزایش دهید.
-- پلن کاربر را به سطح بالاتری ارتقا دهید (`/grant`).
-
-#### MongoDB در دسترس نیست
-- وضعیت سرویس: `sudo systemctl status mongod`
-- لاگ MongoDB: `tail -f /var/log/mongodb/mongod.log`
+- فایل `.env` را هرگز در گیت قرار ندهید
+- فایل‌های session را محافظت کنید
+- دسترسی ادمین را به حداقل برسانید
+- بکاپ منظم بگیرید
 
 ---
 
-## 🔒 امنیت
+## لایسنس
 
-- فایل `.env` و `sessions/*` حاوی اطلاعات حساس هستند. مطمئن شوید مجوزهای فایلی محدود باشد:
-  ```bash
-  chmod 600 .env
-  chmod 700 sessions
-  ```
-- پشتیبان‌گیری منظم از MongoDB:
-  ```bash
-  mongodump --db tele2rub_pro --out /backups/$(date +%F)
-  ```
+MIT License
 
 ---
 
-## 📜 مجوز
+## توسعه‌دهنده
 
-این پروژه بر پایه‌ی [Tele2Rub](https://github.com/Hossein-Maleki/TTR) ساخته شده است.
-
----
-
-## 🤝 پشتیبانی
-
-اگر سؤالی داشتید یا مشکلی پیش آمد، یک Issue باز کنید.
+برای گزارش باگ یا پیشنهاد، issue بزنید.
+"
+Observation: Create successful: /app/project/README.md

@@ -1,71 +1,78 @@
-
-# Action: file_editor create /app/bot/main.py --file-text """"
-# Launcher: runs telebot.py (Telegram bot) and rub_worker.py (Rubika worker)
-# as two child processes, restarts them if they crash.
-# """
-import os
-import signal
 import subprocess
 import sys
-import time
+import signal
 from pathlib import Path
 
-
 BASE_DIR = Path(__file__).resolve().parent
-PYTHON = sys.executable
+
+telegram_file = BASE_DIR / "telebot.py"
+rubika_file = BASE_DIR / "rubbot.py"
+
+telegram_proc = None
+rubika_proc = None
 
 
-def start_process(script: str) -> subprocess.Popen:
-    return subprocess.Popen(
-        [PYTHON, "-u", str(BASE_DIR / script)],
-        cwd=str(BASE_DIR),
-        env=os.environ.copy(),
-    )
+def cleanup(signum=None, frame=None):
+    for proc in [telegram_proc, rubika_proc]:
+        if proc and proc.poll() is None:
+            proc.terminate()
+    sys.exit(0)
 
 
-def main() -> None:
-    print("=== Tele2Rub Pro launcher ===")
-    procs: dict[str, subprocess.Popen] = {}
+signal.signal(signal.SIGINT, cleanup)
+signal.signal(signal.SIGTERM, cleanup)
 
-    def shutdown(*_):
-        print("Shutting down ...")
-        for p in procs.values():
+
+def main():
+    global telegram_proc, rubika_proc
+
+    print("=" * 50)
+    print("  Telegram-to-Rubika File Transfer Bot")
+    print("=" * 50)
+    print()
+    print("Starting services...")
+
+    try:
+        # Start Rubika bot first (needs session)
+        print("[1/2] Starting Rubika bot...")
+        rubika_proc = subprocess.Popen(
+            [sys.executable, str(rubika_file)],
+            cwd=str(BASE_DIR)
+        )
+
+        # Start Telegram bot
+        print("[2/2] Starting Telegram bot...")
+        telegram_proc = subprocess.Popen(
+            [sys.executable, str(telegram_file)],
+            cwd=str(BASE_DIR)
+        )
+
+        print()
+        print("Both services are running.")
+        print("Press Ctrl+C to stop.")
+        print()
+
+        # Wait for either process to exit
+        while True:
+            if rubika_proc.poll() is not None:
+                print(f"Rubika bot exited with code {rubika_proc.returncode}")
+                break
+            if telegram_proc.poll() is not None:
+                print(f"Telegram bot exited with code {telegram_proc.returncode}")
+                break
+
             try:
-                p.terminate()
-            except Exception:
+                rubika_proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
                 pass
-        for p in procs.values():
-            try:
-                p.wait(timeout=10)
-            except Exception:
-                try:
-                    p.kill()
-                except Exception:
-                    pass
-        sys.exit(0)
 
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
-
-    targets = {"rubika": "rub_worker.py", "telegram": "telebot.py"}
-
-    # Start rubika first so it can prompt for the verification code interactively
-    for name, script in targets.items():
-        procs[name] = start_process(script)
-        print(f"[{name}] started (pid={procs[name].pid})")
-        time.sleep(2)
-
-    # Supervise: if any process dies, restart it after a short delay.
-    while True:
-        for name, script in targets.items():
-            proc = procs[name]
-            if proc.poll() is not None:
-                print(f"[{name}] exited with code {proc.returncode}. Restarting in 5s ...")
-                time.sleep(5)
-                procs[name] = start_process(script)
-                print(f"[{name}] restarted (pid={procs[name].pid})")
-        time.sleep(2)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    finally:
+        cleanup()
 
 
 if __name__ == "__main__":
     main()
+
+
