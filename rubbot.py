@@ -324,17 +324,21 @@ async def run_bot():
         except Exception:
             pass
 
-
 if __name__ == "__main__":
+
     if not ensure_session():
         print("Starting login process...")
-        # Run client to trigger login
+
         async def login():
             async with Client(name=str(BASE_DIR / RUBIKA_SESSION)) as c:
                 me = await c.get_me()
-                print(f"Logged in successfully. GUID: {me}")
-        asyncio.run(login())
-    else:
-        asyncio.run(run_bot())
+                print(f"Logged in successfully.")
+                print(me)
 
+        asyncio.run(login())
+
+        print("Session created successfully.")
+        print("Restarting bot...\n")
+
+    asyncio.run(run_bot())
 
