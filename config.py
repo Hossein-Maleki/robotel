@@ -1,38 +1,104 @@
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass
 from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
-
-BASE_DIR = Path(__file__).resolve().parent
-DOWNLOAD_DIR = BASE_DIR / "downloads"
-DB_PATH = BASE_DIR / "bot.db"
-
-# Telegram Settings
-API_ID = int(os.getenv("API_ID", "0"))
-API_HASH = os.getenv("API_HASH", "").strip()
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-
-# Rubika Settings
-RUBIKA_SESSION = os.getenv("RUBIKA_SESSION", "rubika_session").strip()
-
-# Admin Telegram IDs (comma-separated in .env)
-ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
-
-# Channel ID for storing files (optional, bot must be admin)
-CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0")) if os.getenv("CHANNEL_ID", "").strip().lstrip("-").isdigit() else 0
-
-# Subscription Plans - 25,000 Toman per GB
-PLANS = {
-    1: {"name": "پلن ۲ گیگابایت", "volume_gb": 2, "price_toman": 50000, "duration_days": 30},
-    2: {"name": "پلن ۴ گیگابایت", "volume_gb": 4, "price_toman": 100000, "duration_days": 30},
-    3: {"name": "پلن ۶ گیگابایت", "volume_gb": 6, "price_toman": 150000, "duration_days": 30},
-    4: {"name": "پلن ۱۰ گیگابایت", "volume_gb": 10, "price_toman": 250000, "duration_days": 30},
-}
-
-# Max file size (2 GB)
-MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
-
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Load .env from project root (file beside this config.py)
+BASE_DIR: Path = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 
+def _get_int(key: str, default: int) -> int:
+    """Read an int env var safely."""
+    raw = os.getenv(key)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+@dataclass(frozen=True)
+class TelegramConfig:
+    """Telegram-related credentials (obtained at https://my.telegram.org)."""
+    api_id: int = _get_int("TELEGRAM_API_ID", 0)
+    api_hash: str = os.getenv("TELEGRAM_API_HASH", "")
+    bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    # Pyrogram session name (stored as <session>.session next to bot.py)
+    session_name: str = os.getenv("TELEGRAM_SESSION_NAME", "tele2rub_bot")
+
+
+@dataclass(frozen=True)
+class RubikaConfig:
+    """Rubika account configuration.
+
+    `session_name` -> rubpy will create `<session_name>.rbs` (or similar) on
+    first login (interactive: phone + OTP).
+    `target_peer`  -> where files are uploaded on Rubika. Use "me" to upload
+                      into the logged-in account's Saved Messages, or a
+                      private channel guid like 'c0xxxxxxxxxxxxxxxxxxxxxxxx'.
+    """
+    session_name: str = os.getenv("RUBIKA_SESSION", "rubpy")
+    target_peer: str = os.getenv("RUBIKA_TARGET_PEER", "me")
+
+
+@dataclass(frozen=True)
+class SubscriptionConfig:
+    """Per-tier limits, in bytes."""
+    # Free tier
+    free_single_file_bytes: int = _get_int("FREE_SINGLE_FILE_BYTES", 100 * 1024 * 1024)        # 100 MB
+    free_total_quota_bytes: int = _get_int("FREE_TOTAL_QUOTA_BYTES", 500 * 1024 * 1024)        # 500 MB
+
+    # Premium tier
+    premium_single_file_bytes: int = _get_int("PREMIUM_SINGLE_FILE_BYTES", 1024 * 1024 * 1024) # 1 GB
+    premium_total_quota_bytes: int = _get_int("PREMIUM_TOTAL_QUOTA_BYTES", 10 * 1024 * 1024 * 1024)  # 10 GB
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    """Top-level immutable configuration."""
+    telegram: TelegramConfig = TelegramConfig()
+    rubika: RubikaConfig = RubikaConfig()
+    subscription: SubscriptionConfig = SubscriptionConfig()
+
+    # SQLite database file (lives next to source). Override via env if needed.
+    db_path: str = os.getenv("DB_PATH", str(BASE_DIR / "tele2rub.db"))
+
+    # Comma-separated Telegram user IDs that should be treated as admins.
+    admin_ids: tuple[int, ...] = tuple(
+        int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()
+    )
+
+    # Logging
+    log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+
+# Single shared instance — import this everywhere.
+config = AppConfig()
+
+
+def assert_runtime_config() -> None:
+    """
+    Validate that the minimum required runtime credentials are present.
+
+    Called from `bot.py` on startup so the operator sees a clear error
+    instead of a deep stack trace.
+    """
+    missing: list[str] = []
+    if not config.telegram.api_id:
+        missing.append("TELEGRAM_API_ID")
+    if not config.telegram.api_hash:
+        missing.append("TELEGRAM_API_HASH")
+    if not config.telegram.bot_token:
+        missing.append("TELEGRAM_BOT_TOKEN")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variables: "
+            + ", ".join(missing)
+            + ". Copy .env.example to .env and fill them in."
+        )
